@@ -369,6 +369,153 @@
 
 
 
+# from flask import Flask, request, send_file
+# import cv2
+# import numpy as np
+# import io
+# import os
+
+# app = Flask(__name__)
+
+# # مقادیر پیش‌فرض واترمارک
+# WATERMARK_WIDTH = 300
+# WATERMARK_HEIGHT = 150
+# PADDING_X = 10
+# PADDING_Y = 10
+
+# def clean_specified_area(image_bytes, x_pad, y_pad, w, h):
+#     nparr = np.frombuffer(image_bytes, np.uint8)
+#     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+#     img_height, img_width = img.shape[:2]
+
+#     x_start = x_pad
+#     y_start = img_height - h - y_pad
+
+#     x_end = min(img_width, x_start + w)
+#     y_end = min(img_height, y_start + h)
+
+#     mask = np.zeros(img.shape[:2], dtype="uint8")
+#     mask[y_start:y_end, x_start:x_end] = 255
+
+#     result = cv2.inpaint(img, mask, 5, cv2.INPAINT_TELEA)
+
+#     is_success, buffer = cv2.imencode(".jpg", result)
+#     io_buf = io.BytesIO(buffer)
+#     io_buf.seek(0)
+#     return io_buf
+
+# @app.route('/process', methods=['POST'])
+# def process_image():
+#     if 'file' not in request.files:
+#         return {"error": "No file provided"}, 400
+
+#     file = request.files['file']
+
+#     try:
+#         x_pad = int(request.form.get('x', PADDING_X))
+#         y_pad = int(request.form.get('y', PADDING_Y))
+#         w = int(request.form.get('width', WATERMARK_WIDTH))
+#         h = int(request.form.get('height', WATERMARK_HEIGHT))
+#     except:
+#         return {"error": "Invalid coordinates provided"}, 400
+
+#     try:
+#         processed_image = clean_specified_area(file.read(), x_pad, y_pad, w, h)
+#         return send_file(processed_image, mimetype='image/jpeg')
+#     except Exception as e:
+#         print(f"Processing Error in Python: {e}")
+#         return {"error": "Processing failed in Python"}, 500
+
+
+# if __name__ == "__main__":
+#     # Render پورت خودش را در متغیر محیطی PORT قرار می‌دهد
+#     port = int(os.environ.get("PORT", 5000))
+#     app.run(host="0.0.0.0", port=port)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# from flask import Flask, request, send_file
+# import cv2
+# import numpy as np
+# import io
+# import os
+
+# app = Flask(__name__)
+
+# # مقادیر پیش‌فرض واترمارک
+# WATERMARK_WIDTH = 300
+# WATERMARK_HEIGHT = 150
+# PADDING_X = 10
+# PADDING_Y = 10
+
+# def clean_specified_area(image_bytes, x_pad, y_pad, w, h):
+#     nparr = np.frombuffer(image_bytes, np.uint8)
+#     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+#     img_height, img_width = img.shape[:2]
+
+#     x_start = x_pad
+#     y_start = img_height - h - y_pad
+#     x_end = min(img_width, x_start + w)
+#     y_end = min(img_height, y_start + h)
+
+#     mask = np.zeros(img.shape[:2], dtype="uint8")
+#     mask[y_start:y_end, x_start:x_end] = 255
+
+#     result = cv2.inpaint(img, mask, 5, cv2.INPAINT_TELEA)
+
+#     is_success, buffer = cv2.imencode(".jpg", result)
+#     io_buf = io.BytesIO(buffer)
+#     io_buf.seek(0)
+#     return io_buf
+
+# @app.route('/process', methods=['POST'])
+# def process_image():
+#     if 'file' not in request.files:
+#         return {"error": "No file provided"}, 400
+
+#     file = request.files['file']
+
+#     try:
+#         x_pad = int(request.form.get('x', PADDING_X))
+#         y_pad = int(request.form.get('y', PADDING_Y))
+#         w = int(request.form.get('width', WATERMARK_WIDTH))
+#         h = int(request.form.get('height', WATERMARK_HEIGHT))
+#     except:
+#         return {"error": "Invalid coordinates provided"}, 400
+
+#     try:
+#         processed_image = clean_specified_area(file.read(), x_pad, y_pad, w, h)
+#         # تست ذخیره موقت برای اطمینان
+#         with open("out_test.jpg", "wb") as f:
+#             f.write(processed_image.getbuffer())
+#             processed_image.seek(0)
+#         return send_file(processed_image, mimetype='image/jpeg')
+#     except Exception as e:
+#         print(f"Processing Error in Python: {e}")
+#         return {"error": "Processing failed in Python"}, 500
+
+# if __name__ == "__main__":
+#     port = int(os.environ.get("PORT", 5000))
+#     app.run(host="0.0.0.0", port=port)
+
+
 from flask import Flask, request, send_file
 import cv2
 import numpy as np
@@ -377,30 +524,53 @@ import os
 
 app = Flask(__name__)
 
-# مقادیر پیش‌فرض واترمارک
-WATERMARK_WIDTH = 300
-WATERMARK_HEIGHT = 150
-PADDING_X = 10
-PADDING_Y = 10
+# --- پیکربندی محیطی ---
+# مقادیر پیش‌فرض برای تست محلی. در Render از متغیرهای محیطی استفاده کنید.
+DEFAULT_WIDTH = int(os.environ.get("PROCESS_WIDTH", 300))
+DEFAULT_HEIGHT = int(os.environ.get("PROCESS_HEIGHT", 150))
+DEFAULT_PADDING_X = int(os.environ.get("PADDING_X", 10))
+DEFAULT_PADDING_Y = int(os.environ.get("PADDING_Y", 10))
 
-def clean_specified_area(image_bytes, x_pad, y_pad, w, h):
+
+def process_image_area(image_bytes, x_pad, y_pad, w, h):
+    """
+    تصویر را دیکد می‌کند، یک فیلتر استاندارد (مانند Blur) را روی ناحیه مشخص شده
+    اعمال می‌کند و بافر JPEG تصویر پردازش شده را برمی‌گرداند.
+    
+    ⚠️ توجه: منطق inpaint با اعمال فیلتر Gaussian Blur جایگزین شده است.
+    """
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
     img_height, img_width = img.shape[:2]
 
+    # محاسبه مختصات ناحیه پردازش (با فرض مبدأ bottom-left از Node.js)
     x_start = x_pad
     y_start = img_height - h - y_pad
-
     x_end = min(img_width, x_start + w)
     y_end = min(img_height, y_start + h)
+    
+    # اطمینان از صحت مختصات
+    x_start = max(0, x_start)
+    y_start = max(0, y_start)
+    x_end = max(0, x_end)
+    y_end = max(0, y_end)
 
-    mask = np.zeros(img.shape[:2], dtype="uint8")
-    mask[y_start:y_end, x_start:x_end] = 255
+    if x_start < x_end and y_start < y_end:
+        # استخراج Region of Interest (ROI)
+        roi = img[y_start:y_end, x_start:x_end]
+        
+        # اعمال فیلتر Gaussian Blur (مثال پردازش مجاز)
+        blurred_roi = cv2.GaussianBlur(roi, (21, 21), 0)
+        
+        # جایگزینی ناحیه پردازش شده در تصویر اصلی
+        img[y_start:y_end, x_start:x_end] = blurred_roi
 
-    result = cv2.inpaint(img, mask, 5, cv2.INPAINT_TELEA)
-
-    is_success, buffer = cv2.imencode(".jpg", result)
+    # انکد کردن نتیجه به بافر JPEG
+    is_success, buffer = cv2.imencode(".jpg", img)
+    
+    if not is_success:
+        raise Exception("Failed to encode image to JPEG.")
+        
     io_buf = io.BytesIO(buffer)
     io_buf.seek(0)
     return io_buf
@@ -408,27 +578,34 @@ def clean_specified_area(image_bytes, x_pad, y_pad, w, h):
 @app.route('/process', methods=['POST'])
 def process_image():
     if 'file' not in request.files:
+        print("Error: No file provided.")
         return {"error": "No file provided"}, 400
 
     file = request.files['file']
 
+    # استخراج مختصات از FormData ارسالی توسط Node.js
     try:
-        x_pad = int(request.form.get('x', PADDING_X))
-        y_pad = int(request.form.get('y', PADDING_Y))
-        w = int(request.form.get('width', WATERMARK_WIDTH))
-        h = int(request.form.get('height', WATERMARK_HEIGHT))
-    except:
+        x_pad = int(request.form.get('x', DEFAULT_PADDING_X))
+        y_pad = int(request.form.get('y', DEFAULT_PADDING_Y))
+        w = int(request.form.get('width', DEFAULT_WIDTH))
+        h = int(request.form.get('height', DEFAULT_HEIGHT))
+    except (TypeError, ValueError):
+        print("Error: Invalid coordinates provided.")
         return {"error": "Invalid coordinates provided"}, 400
 
     try:
-        processed_image = clean_specified_area(file.read(), x_pad, y_pad, w, h)
-        return send_file(processed_image, mimetype='image/jpeg')
+        # خواندن داده‌های فایل و پردازش مستقیم
+        image_data = file.read()
+        processed_image_buffer = process_image_area(image_data, x_pad, y_pad, w, h)
+        
+        # ارسال مستقیم بافر به Node.js
+        return send_file(processed_image_buffer, mimetype='image/jpeg')
+        
     except Exception as e:
         print(f"Processing Error in Python: {e}")
-        return {"error": "Processing failed in Python"}, 500
-
+        return {"error": f"Processing failed in Python: {e}"}, 500
 
 if __name__ == "__main__":
-    # Render پورت خودش را در متغیر محیطی PORT قرار می‌دهد
+    # Render از Gunicorn و متغیر PORT استفاده خواهد کرد. این بخش فقط برای تست محلی است.
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
