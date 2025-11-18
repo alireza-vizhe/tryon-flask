@@ -283,6 +283,90 @@
 
 
 
+# from flask import Flask, request, send_file
+# import cv2
+# import numpy as np
+# import io
+
+# app = Flask(__name__)
+
+# # مختصات ثابت پدینگ و ابعاد واترمارک
+# # توجه: اینها همان مقادیری هستند که از Node.js ارسال می‌شوند
+# WATERMARK_WIDTH = 300
+# WATERMARK_HEIGHT = 150
+# PADDING_X = 10  # فاصله از چپ
+# PADDING_Y = 10  # فاصله از پایین
+
+# def clean_specified_area(image_bytes, x_pad, y_pad, w, h):
+#     # 1. تبدیل بایت به عکس
+#     nparr = np.frombuffer(image_bytes, np.uint8)
+#     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+#     img_height, img_width = img.shape[:2]
+
+#     # 2. محاسبه مختصات دقیق برای گوشه پایین سمت چپ
+    
+#     # X شروع: فاصله از چپ (PADDING_X)
+#     x_start = x_pad
+    
+#     # Y شروع (بالای واترمارک) = (ارتفاع کل عکس) - (ارتفاع واترمارک) - (فاصله از پایین)
+#     y_start = img_height - h - y_pad
+    
+#     # X و Y نهایی
+#     x_end = min(img_width, x_start + w)
+#     y_end = min(img_height, y_start + h)
+
+#     # 3. ساخت ماسک (Mask)
+#     mask = np.zeros(img.shape[:2], dtype="uint8")
+    
+#     # ناحیه ماسک شده (ناحیه حذف) را سفید می‌کنیم
+#     mask[y_start:y_end, x_start:x_end] = 255
+    
+#     # 4. حذف ناحیه ماسک شده (Inpainting)
+#     # از الگوریتم Telea استفاده می‌کنیم
+#     result = cv2.inpaint(img, mask, 5, cv2.INPAINT_TELEA)
+
+#     # 5. تبدیل نتیجه به فرمت قابل ارسال (JPEG)
+#     is_success, buffer = cv2.imencode(".jpg", result)
+#     io_buf = io.BytesIO(buffer)
+#     io_buf.seek(0)
+#     return io_buf
+
+# @app.route('/process', methods=['POST'])
+# def process_image():
+#     if 'file' not in request.files:
+#         return {"error": "No file provided"}, 400
+    
+#     file = request.files['file']
+    
+#     # دریافت مختصات ثابت از Node.js
+#     try:
+#         x_pad = int(request.form.get('x', PADDING_X))
+#         y_pad = int(request.form.get('y', PADDING_Y))
+#         w = int(request.form.get('width', WATERMARK_WIDTH))
+#         h = int(request.form.get('height', WATERMARK_HEIGHT))
+#     except (ValueError, TypeError):
+#         return {"error": "Invalid coordinates provided"}, 400
+
+#     try:
+#         processed_image = clean_specified_area(file.read(), x_pad, y_pad, w, h)
+#         return send_file(processed_image, mimetype='image/jpeg')
+#     except Exception as e:
+#         print(f"Processing Error in Python: {e}")
+#         return {"error": "Processing failed in Python"}, 500
+
+# if __name__ == '__main__':
+#     # پورت اختصاصی برای سرویس پردازش پایتون
+#     app.run(port=5000, debug=True)
+
+
+
+
+
+
+
+
+
 
 
 from flask import Flask, request, send_file
@@ -293,32 +377,30 @@ import os
 
 app = Flask(__name__)
 
-# پیش‌فرض‌ها (اگر ارسال نشد از این‌ها استفاده میشه)
+# مقادیر پیش‌فرض واترمارک
 WATERMARK_WIDTH = 300
-WATERMARK_HEIGHT = 100
-DEFAULT_PADDING_X = 10
-DEFAULT_PADDING_Y = 10
+WATERMARK_HEIGHT = 150
+PADDING_X = 10
+PADDING_Y = 10
 
 def clean_specified_area(image_bytes, x_pad, y_pad, w, h):
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is None:
-        raise ValueError("Unable to decode image")
+
     img_height, img_width = img.shape[:2]
 
-    x_start = max(0, int(x_pad))
-    y_start = max(0, img_height - int(h) - int(y_pad))
-    x_end = min(img_width, x_start + int(w))
-    y_end = min(img_height, y_start + int(h))
+    x_start = x_pad
+    y_start = img_height - h - y_pad
+
+    x_end = min(img_width, x_start + w)
+    y_end = min(img_height, y_start + h)
 
     mask = np.zeros(img.shape[:2], dtype="uint8")
     mask[y_start:y_end, x_start:x_end] = 255
 
     result = cv2.inpaint(img, mask, 5, cv2.INPAINT_TELEA)
 
-    is_success, buffer = cv2.imencode(".jpg", result, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-    if not is_success:
-        raise ValueError("Failed to encode result image")
+    is_success, buffer = cv2.imencode(".jpg", result)
     io_buf = io.BytesIO(buffer)
     io_buf.seek(0)
     return io_buf
@@ -331,11 +413,11 @@ def process_image():
     file = request.files['file']
 
     try:
-        x_pad = int(request.form.get('x', DEFAULT_PADDING_X))
-        y_pad = int(request.form.get('y', DEFAULT_PADDING_Y))
+        x_pad = int(request.form.get('x', PADDING_X))
+        y_pad = int(request.form.get('y', PADDING_Y))
         w = int(request.form.get('width', WATERMARK_WIDTH))
         h = int(request.form.get('height', WATERMARK_HEIGHT))
-    except (ValueError, TypeError):
+    except:
         return {"error": "Invalid coordinates provided"}, 400
 
     try:
@@ -343,8 +425,10 @@ def process_image():
         return send_file(processed_image, mimetype='image/jpeg')
     except Exception as e:
         print(f"Processing Error in Python: {e}")
-        return {"error": "Processing failed in Python", "detail": str(e)}, 500
+        return {"error": "Processing failed in Python"}, 500
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
+    # Render پورت خودش را در متغیر محیطی PORT قرار می‌دهد
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host="0.0.0.0", port=port)
