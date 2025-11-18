@@ -520,7 +520,6 @@
 
 
 
-
 import os
 import io
 import cv2
@@ -529,113 +528,78 @@ from flask import Flask, request, send_file, jsonify
 
 app = Flask(__name__)
 
-# مقادیر پیش‌فرض واترمارک
+# تنظیمات پیش‌فرض واترمارک (پایین سمت چپ)
 WATERMARK_WIDTH = 300
 WATERMARK_HEIGHT = 150
 PADDING_X = 10
 PADDING_Y = 10
 
-# مسیر اصلی برای تست سلامت سرور
 @app.route("/")
 def hello_world():
-    print("✅ Python Health Check: Service is running.")
-    return "Python OpenCV Service is running successfully."
+    return "✅ Python OpenCV Service is Running on Render!"
 
 def clean_specified_area(image_bytes, x_pad, y_pad, w, h):
-    """
-    منطق اصلی حذف واترمارک با OpenCV Inpainting.
-    """
-    print(f"🔄 CLEANUP: Starting inpainting process. Area: x={x_pad}, y={y_pad}, w={w}, h={h}")
     try:
-        # تبدیل بایت‌های تصویر به آرایه NumPy برای OpenCV
+        # تبدیل بایت به آرایه نامپای
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if img is None:
-            print("❌ ERROR: cv2.imdecode failed. Image data might be corrupted.")
-            raise Exception("Failed to decode image.")
+            raise Exception("Failed to decode image bytes")
 
         img_height, img_width = img.shape[:2]
-        print(f"INFO: Decoded image size: {img_width}x{img_height}")
 
-        # محاسبه مختصات ناحیه واترمارک
+        # محاسبه مختصات حذف واترمارک (گوشه پایین چپ)
         x_start = x_pad
         y_start = img_height - h - y_pad
+        
+        # جلوگیری از خروج از کادر
+        x_start = max(0, x_start)
+        y_start = max(0, y_start)
         x_end = min(img_width, x_start + w)
         y_end = min(img_height, y_start + h)
-        
-        # بررسی برای جلوگیری از خطا در مختصات غیرمجاز
-        if x_end <= x_start or y_end <= y_start or x_start < 0 or y_start < 0:
-            print("❌ ERROR: Invalid calculated coordinates or zero area.")
-            raise Exception("Calculated watermark area is invalid.")
 
         # ایجاد ماسک
         mask = np.zeros(img.shape[:2], dtype="uint8")
         mask[y_start:y_end, x_start:x_end] = 255
         
-        print("✅ MASK created successfully. Applying inpaint...")
+        # پردازش حذف (Inpainting)
+        result = cv2.inpaint(img, mask, 3, cv2.INPAINT_TELEA)
 
-        # اعمال inpainting
-        result = cv2.inpaint(img, mask, 5, cv2.INPAINT_TELEA)
-
-        # تبدیل نتیجه به بایت برای ارسال از طریق Flask
+        # خروجی
         is_success, buffer = cv2.imencode(".jpg", result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-        
         if not is_success:
-            print("❌ ERROR: Failed to encode image to JPG format.")
-            raise Exception("Failed to encode image to JPG format.")
+            raise Exception("Failed to encode output image")
             
-        io_buf = io.BytesIO(buffer)
-        io_buf.seek(0)
-        print("✅ CLEANUP SUCCESS: Image processed and buffered.")
-        return io_buf
+        return io.BytesIO(buffer)
     
     except Exception as e:
-        print(f"🔥 FATAL ERROR in clean_specified_area: {e}")
+        print(f"🔥 Python Processing Error: {e}")
         raise
 
 @app.route('/process', methods=['POST'])
 def process_image():
-    print("➡️ REQUEST RECEIVED: /process POST")
-    
-    # بررسی فایل ورودی ارسالی از Node.js
     if 'file' not in request.files:
-        print("❌ ERROR: No 'file' key found in request.")
-        return jsonify({"error": "No file provided"}), 400
+        return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files['file']
-
-    # دریافت مختصات از Node.js
+    
     try:
-        x_pad = int(request.form.get('x', PADDING_X))
-        y_pad = int(request.form.get('y', PADDING_Y))
+        # خواندن پارامترها (اختیاری)
+        x = int(request.form.get('x', PADDING_X))
+        y = int(request.form.get('y', PADDING_Y))
         w = int(request.form.get('width', WATERMARK_WIDTH))
         h = int(request.form.get('height', WATERMARK_HEIGHT))
-        print(f"INFO: Received parameters: x={x_pad}, y={y_pad}, w={w}, h={h}")
-    except Exception as e:
-        print(f"❌ ERROR: Invalid form data for coordinates: {e}")
-        return jsonify({"error": f"Invalid coordinates provided: {e}"}), 400
 
-    try:
-        # 1. خواندن کل بایت‌های فایل
-        file_bytes = file.read()
-        print(f"INFO: File bytes read successfully. Size: {len(file_bytes)} bytes")
+        # پردازش تصویر
+        processed_image = clean_specified_area(file.read(), x, y, w, h)
         
-        # 2. پردازش توسط تابع
-        processed_image = clean_specified_area(file_bytes, x_pad, y_pad, w, h)
-        
-        # 3. ارسال فایل به Node.js
-        print("⬅️ RESPONSE SENT: Sending image/jpeg back to Node.js.")
         return send_file(processed_image, mimetype='image/jpeg')
     
     except Exception as e:
-        # خطاهای داخلی Python
-        error_msg = f"Processing failed in Python: {e}"
-        print(f"🛑 CRITICAL FAILURE: {error_msg}")
-        return jsonify({"error": error_msg}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # تنظیم پورت برای سازگاری با Render
+    # Render پورت را در متغیر محیطی PORT قرار می‌دهد
     port = int(os.environ.get("PORT", 10000))
-    print(f"🚀 FLASK SERVER STARTING on 0.0.0.0:{port}")
     app.run(host="0.0.0.0", port=port)
